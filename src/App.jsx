@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import AnnotationRow from './components/AnnotationRow';
 import AnnotationDialog from './components/AnnotationDialog';
-import { getEntityColor, getPotentialMatchStyle } from './utils/colorUtils';
+import DocumentNavigation from './components/DocumentNavigation';
 import { parsePubtator, generateExportContent } from './utils/pubtatorUtils';
+import { getCombinedText, renderHighlightedText, getTextSelectionInfo } from './components/textHighlight';
 
 const PubTatorEditor = () => {
   const [documents, setDocuments] = useState([]);
@@ -10,157 +11,12 @@ const PubTatorEditor = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
   const [knownEntityTypes, setKnownEntityTypes] = useState(['Chemical', 'Gene', 'Disease', 'Species', 'Mutation', 'CellLine']);
-  const [docIdSearch, setDocIdSearch] = useState('');
-  const [showDocIdDropdown, setShowDocIdDropdown] = useState(false);
   const [originalFilename, setOriginalFilename] = useState('pubtator_annotations.txt');
-  const docSearchRef = useRef(null);
+  const [regexPattern, setRegexPattern] = useState('');
   const fullTextRef = useRef(null);
 
   // Get current document or empty placeholder
   const currentDoc = documents[currentDocIndex] || { id: '', title: '', abstract: '', annotations: [] };
-
-  // Get combined text (title + abstract)
-  const getCombinedText = () => {
-    return currentDoc.title + (currentDoc.abstract ? " " + currentDoc.abstract : "");
-  };
-
-  // Render highlighted document text (title + abstract)
-  const renderHighlightedText = () => {
-    const combinedText = getCombinedText();
-    if (!combinedText) return <p>No content available</p>;
-
-    const annotations = [...currentDoc.annotations].sort((a, b) => a.start - b.start);
-    let lastEnd = 0;
-    const segments = [];
-
-    // Collect all unique annotated texts with their types
-    const uniqueAnnotatedTexts = new Map();
-    for (const anno of annotations) {
-      // Only consider annotations with text of reasonable length (not too short or too long)
-      if (anno.text.length >= 1 && anno.text.length <= 50) {
-        uniqueAnnotatedTexts.set(anno.text.toLowerCase(), anno.type);
-      }
-    }
-
-    for (const anno of annotations) {
-      // Text before annotation
-      if (anno.start > lastEnd) {
-        segments.push({
-          text: combinedText.substring(lastEnd, anno.start),
-          highlighted: false
-        });
-      }
-
-      // Highlighted annotation
-      segments.push({
-        text: combinedText.substring(anno.start, anno.end),
-        highlighted: true,
-        type: anno.type
-      });
-
-      lastEnd = anno.end;
-    }
-
-    // Remaining text
-    if (lastEnd < combinedText.length) {
-      segments.push({
-        text: combinedText.substring(lastEnd),
-        highlighted: false
-      });
-    }
-
-    // Process segments to find potential matches
-    const finalSegments = [];
-    for (const segment of segments) {
-      if (!segment.highlighted && segment.text.length > 0) {
-        // Process this non-highlighted segment to find potential matches
-        let currentPosition = 0;
-        let lastMatchEnd = 0;
-        const textToAnalyze = segment.text;
-
-        while (currentPosition < textToAnalyze.length) {
-          // Find the longest match at the current position
-          let bestMatch = null;
-          let bestMatchType = null;
-          let bestMatchLength = 0;
-
-          for (const [annoText, type] of uniqueAnnotatedTexts.entries()) {
-            if (textToAnalyze.substring(currentPosition).toLowerCase().startsWith(annoText) &&
-              annoText.length > bestMatchLength) {
-              bestMatch = annoText;
-              bestMatchType = type;
-              bestMatchLength = annoText.length;
-            }
-          }
-
-          if (bestMatch) {
-            // Add text before match if any
-            if (currentPosition > lastMatchEnd) {
-              finalSegments.push({
-                text: textToAnalyze.substring(lastMatchEnd, currentPosition),
-                highlighted: false
-              });
-            }
-
-            // Add the match
-            finalSegments.push({
-              text: textToAnalyze.substring(currentPosition, currentPosition + bestMatchLength),
-              highlighted: 'potential',
-              type: bestMatchType
-            });
-
-            lastMatchEnd = currentPosition + bestMatchLength;
-            currentPosition = lastMatchEnd;
-          } else {
-            // Move to next character
-            currentPosition++;
-          }
-        }
-
-        // Add any remaining text
-        if (lastMatchEnd < textToAnalyze.length) {
-          finalSegments.push({
-            text: textToAnalyze.substring(lastMatchEnd),
-            highlighted: false
-          });
-        }
-      } else {
-        // Keep highlighted segments as they are
-        finalSegments.push(segment);
-      }
-    }
-
-    return (
-      <p className="whitespace-pre-wrap">
-        {finalSegments.map((segment, i) => {
-          if (segment.highlighted === true) {
-            const colorClasses = getEntityColor(segment.type);
-            return (
-              <mark
-                key={i}
-                className={`border rounded px-[2px] ${colorClasses.highlight}`}
-                title={segment.type}
-              >
-                {segment.text}
-              </mark>
-            );
-          } else if (segment.highlighted === 'potential') {
-            const potentialStyle = getPotentialMatchStyle();
-            return (
-              <span
-                key={i}
-                className={`${potentialStyle.text} ${potentialStyle.style}`}
-                title={`Potential ${segment.type}`}
-              >
-                {segment.text}
-              </span>
-            );
-          }
-          return <span key={i}>{segment.text}</span>;
-        })}
-      </p>
-    );
-  };
 
   // Handle file upload
   const handleFileUpload = (event) => {
@@ -272,39 +128,24 @@ const PubTatorEditor = () => {
   const handleTextSelection = () => {
     if (window.getSelection && fullTextRef.current) {
       const selection = window.getSelection();
-      const text = selection.toString().trim();
+      const selectionInfo = getTextSelectionInfo(selection, fullTextRef.current);
 
-      if (text) {
-        const fullText = fullTextRef.current.textContent;
+      if (selectionInfo) {
+        // Find the dialog element and open it
+        const dialog = document.getElementById('add-annotation-dialog');
 
-        // Find all occurrences of the selected text
-        let selectionStart = -1;
-        const selectionRange = selection.getRangeAt(0);
-        const preSelectionRange = document.createRange();
+        // Set form values
+        document.getElementById('new-start').value = selectionInfo.start;
+        document.getElementById('new-end').value = selectionInfo.end;
+        document.getElementById('new-text').value = selectionInfo.text;
 
-        preSelectionRange.setStartBefore(fullTextRef.current);
-        preSelectionRange.setEnd(selectionRange.startContainer, selectionRange.startOffset);
+        // Focus the type field
+        setTimeout(() => {
+          document.getElementById('new-type').focus();
+        }, 100);
 
-        // Determine exact start position considering the combined text
-        selectionStart = preSelectionRange.toString().length;
-
-        if (selectionStart >= 0) {
-          // Find the dialog element and open it
-          const dialog = document.getElementById('add-annotation-dialog');
-
-          // Set form values
-          document.getElementById('new-start').value = selectionStart;
-          document.getElementById('new-end').value = selectionStart + text.length;
-          document.getElementById('new-text').value = text;
-
-          // Focus the type field
-          setTimeout(() => {
-            document.getElementById('new-type').focus();
-          }, 100);
-
-          if (dialog) {
-            dialog.showModal();
-          }
+        if (dialog) {
+          dialog.showModal();
         }
       }
     }
@@ -361,52 +202,6 @@ const PubTatorEditor = () => {
     setCurrentDocIndex(documents.length);
   };
 
-  // Navigate to a specific document by ID
-  const navigateToDocumentById = (id = null) => {
-    const searchId = id || docIdSearch.trim();
-    if (!searchId) return;
-
-    const docIndex = documents.findIndex(doc => doc.id === searchId);
-
-    if (docIndex !== -1) {
-      setCurrentDocIndex(docIndex);
-      setDocIdSearch('');
-      setShowDocIdDropdown(false);
-    } else {
-      alert(`Document with ID "${searchId}" not found`);
-    }
-  };
-
-  // Handle enter key press in search box
-  const handleSearchKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      navigateToDocumentById();
-    } else if (e.key === 'ArrowDown' && !showDocIdDropdown) {
-      setShowDocIdDropdown(true);
-    } else if (e.key === 'Escape') {
-      setShowDocIdDropdown(false);
-    }
-  };
-
-  // Filter document IDs based on search term
-  const filteredDocIds = documents
-    .map(doc => doc.id)
-    .filter(id => id.toLowerCase().includes(docIdSearch.toLowerCase()));
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (docSearchRef.current && !docSearchRef.current.contains(event.target)) {
-        setShowDocIdDropdown(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
   return (
     <div className="container mx-auto p-4 max-w-6xl">
       <header className="mb-6">
@@ -449,59 +244,12 @@ const PubTatorEditor = () => {
 
       {/* Document navigation */}
       {documents.length > 0 && (
-        <div className="mb-4 flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setCurrentDocIndex(Math.max(0, currentDocIndex - 1))}
-            disabled={currentDocIndex === 0}
-            className="bg-gray-200 px-3 py-1 rounded disabled:opacity-50"
-          >
-            ← Previous
-          </button>
-          <span>Document {currentDocIndex + 1} of {documents.length}</span>
-          <button
-            onClick={() => setCurrentDocIndex(Math.min(documents.length - 1, currentDocIndex + 1))}
-            disabled={currentDocIndex === documents.length - 1}
-            className="bg-gray-200 px-3 py-1 rounded disabled:opacity-50"
-          >
-            Next →
-          </button>
-
-          <div className="flex ml-auto gap-1 relative" ref={docSearchRef}>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Enter document ID"
-                value={docIdSearch}
-                onChange={(e) => {
-                  setDocIdSearch(e.target.value);
-                  setShowDocIdDropdown(true);
-                }}
-                onClick={() => setShowDocIdDropdown(true)}
-                onKeyDown={handleSearchKeyDown}
-                className="border rounded px-2 py-1 text-sm"
-              />
-              {showDocIdDropdown && filteredDocIds.length > 0 && (
-                <div className="absolute left-0 right-0 mt-1 bg-white border rounded shadow-lg max-h-60 overflow-y-auto z-10">
-                  {filteredDocIds.map((id, index) => (
-                    <div
-                      key={index}
-                      className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                      onClick={() => navigateToDocumentById(id)}
-                    >
-                      {id}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <button
-              onClick={() => navigateToDocumentById()}
-              className="bg-blue-600 text-white px-3 py-1 rounded text-sm"
-            >
-              Go to ID
-            </button>
-          </div>
-        </div>
+        <DocumentNavigation
+          currentDocIndex={currentDocIndex}
+          documentsCount={documents.length}
+          onNavigate={setCurrentDocIndex}
+          documents={documents}
+        />
       )}
 
       {/* Document content */}
@@ -509,13 +257,35 @@ const PubTatorEditor = () => {
         <div className="space-y-6">
           {/* Document info */}
           <div className="bg-white rounded-lg shadow p-4">
+            {/* Add regex search box */}
+            <div className="mb-3">
+              <div className="flex gap-2 items-center">
+                <label htmlFor="regex-search" className="font-medium text-gray-700">Regex Search:</label>
+                <input
+                  id="regex-search"
+                  type="text"
+                  value={regexPattern}
+                  onChange={(e) => setRegexPattern(e.target.value)}
+                  placeholder="Enter regex pattern..."
+                  className="flex-1 border rounded px-3 py-1 text-sm"
+                />
+                <button
+                  onClick={() => setRegexPattern('')}
+                  className="bg-gray-200 px-2 py-1 rounded text-sm"
+                  disabled={!regexPattern}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
             <div>
               <div
                 className="w-full p-3 border rounded bg-gray-50 min-h-[100px]"
                 onMouseUp={handleTextSelection}
                 ref={fullTextRef}
               >
-                {renderHighlightedText()}
+                {renderHighlightedText(currentDoc, regexPattern)}
               </div>
             </div>
           </div>
@@ -554,9 +324,8 @@ const PubTatorEditor = () => {
                         onEdit={editAnnotation}
                         onDelete={deleteAnnotation}
                         knownEntityTypes={knownEntityTypes}
-                        getEntityColor={getEntityColor}
-                        documentText={getCombinedText()} // Pass document text to the component
-                        onAddNewEntityType={addNewEntityType} // Pass the new function as a prop
+                        documentText={getCombinedText(currentDoc)}
+                        onAddNewEntityType={addNewEntityType}
                       />
                     ))}
                   </tbody>

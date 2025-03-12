@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { getEntityColor } from '../utils/colorUtils';
 
-const AnnotationRow = ({ annotation, index, onEdit, onDelete, knownEntityTypes, getEntityColor, documentText, onAddNewEntityType }) => {
+const AnnotationRow = ({ annotation, index, onEdit, onDelete, knownEntityTypes, documentText, onAddNewEntityType }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedAnnotation, setEditedAnnotation] = useState({ ...annotation });
   const [isCreatingNewType, setIsCreatingNewType] = useState(false);

@@ -46,3 +46,11 @@ export const getPotentialMatchStyle = () => {
     style: 'bg-red-50' // Removed border styles, keeping just light background
   };
 };
+
+// Utility function to get styling for regex matches
+export const getRegexMatchStyle = () => {
+  return {
+    text: 'text-purple-900',
+    style: 'bg-purple-100 rounded px-[1px]'
+  };
+};
