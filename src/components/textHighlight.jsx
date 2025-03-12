@@ -46,11 +46,15 @@ export const processTextSegments = (combinedText, annotations, regexPattern = ''
     // Step 2: Create a map of unique annotated texts
     const uniqueAnnotatedTexts = new Map();
     for (const anno of annotations) {
-        // Only consider annotations with reasonable length
-        if (anno.text.length >= 1 && anno.text.length <= 50) {
+        // For very short texts (length < 2), only include if they contain a number
+        const hasNumber = anno.text.length < 2 ? /\d/.test(anno.text) : true;
+
+        // Only consider annotations with reasonable length and short ones with numbers
+        if (hasNumber && anno.text.length >= 1 && anno.text.length <= 50) {
             uniqueAnnotatedTexts.set(anno.text.toLowerCase(), anno.type);
         }
     }
+
 
     // Step 3: Find potential matches in text
     for (const [annoText, entityType] of uniqueAnnotatedTexts.entries()) {
