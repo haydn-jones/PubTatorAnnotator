@@ -24,8 +24,6 @@ const PubTatorEditor = () => {
     setAllDocuments
   } = useAnnotationManager([], ['Chemical', 'Gene', 'Disease', 'Species', 'Mutation', 'CellLine']);
 
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [importText, setImportText] = useState('');
   const [originalFilename, setOriginalFilename] = useState('pubtator_annotations.txt');
   const [regexPattern, setRegexPattern] = useState('');
   const fullTextRef = useRef(null);
@@ -47,17 +45,6 @@ const PubTatorEditor = () => {
         setKnownEntityTypes([...entityTypes]);
       };
       reader.readAsText(file);
-    }
-  };
-
-  // Handle pasting content
-  const handleImportSubmit = () => {
-    if (importText.trim()) {
-      const { docs, entityTypes } = parsePubtator(importText);
-      setAllDocuments(docs);
-      setKnownEntityTypes([...entityTypes]);
-      setShowImportModal(false);
-      setImportText('');
     }
   };
 
@@ -204,12 +191,6 @@ const PubTatorEditor = () => {
             Load File
           </label>
           <button
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-            onClick={() => setShowImportModal(true)}
-          >
-            Paste Content
-          </button>
-          <button
             className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
             onClick={createNewDocument}
           >
@@ -240,6 +221,14 @@ const PubTatorEditor = () => {
         <div className="space-y-6">
           {/* Document info */}
           <div className="bg-white rounded-lg shadow p-4">
+            {/* Document ID display */}
+            <div className="mb-3 pb-2 border-b">
+              <div className="flex gap-2 items-center">
+                <span className="font-medium text-gray-700">Document ID:</span>
+                <span className="text-gray-900">{currentDoc.id}</span>
+              </div>
+            </div>
+
             {/* Add regex search box */}
             <div className="mb-3">
               <div className="flex gap-2 items-center">
@@ -322,7 +311,7 @@ const PubTatorEditor = () => {
       ) : (
         <div className="text-center py-10 bg-gray-50 rounded">
           <p className="text-xl text-gray-600 mb-4">No documents loaded</p>
-          <p className="text-gray-500">Upload a PubTator file or paste content to get started</p>
+          <p className="text-gray-500">Upload a PubTator file to get started</p>
         </div>
       )}
 
@@ -336,45 +325,6 @@ const PubTatorEditor = () => {
         documentText={getCombinedText(currentDoc)}
       />
 
-      {/* Import text modal */}
-      {showImportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl">
-            <div className="bg-gray-100 px-4 py-3 flex justify-between items-center">
-              <h3 className="font-semibold">Paste PubTator Content</h3>
-              <button
-                onClick={() => setShowImportModal(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="p-4">
-              <textarea
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-                className="w-full p-2 border rounded h-64"
-                placeholder="Paste PubTator content here..."
-              />
-              <div className="flex justify-end gap-2 mt-4">
-                <button
-                  onClick={() => setShowImportModal(false)}
-                  className="px-4 py-2 border rounded"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleImportSubmit}
-                  className="px-4 py-2 bg-blue-600 text-white rounded"
-                  disabled={!importText.trim()}
-                >
-                  Import
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
