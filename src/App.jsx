@@ -4,19 +4,33 @@ import AnnotationDialog from './components/AnnotationDialog';
 import DocumentNavigation from './components/DocumentNavigation';
 import { parsePubtator, generateExportContent } from './utils/pubtatorUtils';
 import { getCombinedText, renderHighlightedText, getTextSelectionInfo } from './components/textHighlight';
+import { useAnnotationManager } from './hooks/useAnnotationManager';
 
 const PubTatorEditor = () => {
-  const [documents, setDocuments] = useState([]);
-  const [currentDocIndex, setCurrentDocIndex] = useState(0);
+  // Use our custom hook for annotation management
+  const {
+    documents,
+    currentDocIndex,
+    setCurrentDocIndex,
+    currentDoc,
+    knownEntityTypes,
+    setKnownEntityTypes,
+    addAnnotation,
+    editAnnotation,
+    deleteAnnotation,
+    findAnnotationIndex,
+    addNewEntityType,
+    createNewDocument,
+    setAllDocuments
+  } = useAnnotationManager([], ['Chemical', 'Gene', 'Disease', 'Species', 'Mutation', 'CellLine']);
+
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
-  const [knownEntityTypes, setKnownEntityTypes] = useState(['Chemical', 'Gene', 'Disease', 'Species', 'Mutation', 'CellLine']);
   const [originalFilename, setOriginalFilename] = useState('pubtator_annotations.txt');
   const [regexPattern, setRegexPattern] = useState('');
   const fullTextRef = useRef(null);
-
-  // Get current document or empty placeholder
-  const currentDoc = documents[currentDocIndex] || { id: '', title: '', abstract: '', annotations: [] };
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [currentAnnotation, setCurrentAnnotation] = useState(null);
 
   // Handle file upload
   const handleFileUpload = (event) => {
@@ -29,8 +43,7 @@ const PubTatorEditor = () => {
       reader.onload = (e) => {
         const content = e.target.result;
         const { docs, entityTypes } = parsePubtator(content);
-        setDocuments(docs);
-        setCurrentDocIndex(0);
+        setAllDocuments(docs);
         setKnownEntityTypes([...entityTypes]);
       };
       reader.readAsText(file);
@@ -41,42 +54,11 @@ const PubTatorEditor = () => {
   const handleImportSubmit = () => {
     if (importText.trim()) {
       const { docs, entityTypes } = parsePubtator(importText);
-      setDocuments(docs);
-      setCurrentDocIndex(0);
+      setAllDocuments(docs);
       setKnownEntityTypes([...entityTypes]);
       setShowImportModal(false);
       setImportText('');
     }
-  };
-
-  // Add a new annotation
-  const addAnnotation = (annotation) => {
-    const updatedDocs = [...documents];
-    updatedDocs[currentDocIndex].annotations.push({
-      ...annotation,
-      id: currentDoc.id
-    });
-
-    // Sort annotations by start position
-    updatedDocs[currentDocIndex].annotations.sort((a, b) => a.start - b.start);
-    setDocuments(updatedDocs);
-  };
-
-  // Edit an annotation
-  const editAnnotation = (index, updatedAnnotation) => {
-    const updatedDocs = [...documents];
-    updatedDocs[currentDocIndex].annotations[index] = {
-      ...updatedAnnotation,
-      id: currentDoc.id
-    };
-    setDocuments(updatedDocs);
-  };
-
-  // Delete an annotation
-  const deleteAnnotation = (index) => {
-    const updatedDocs = [...documents];
-    updatedDocs[currentDocIndex].annotations.splice(index, 1);
-    setDocuments(updatedDocs);
   };
 
   // Save to file
@@ -151,55 +133,56 @@ const PubTatorEditor = () => {
     }
   };
 
-  // Add a new annotation from the form
-  const handleAddAnnotationSubmit = (e) => {
+  // Handle annotation click
+  const handleAnnotationClick = (annotation) => {
+    setIsEditMode(true);
+    setCurrentAnnotation(annotation);
+    document.getElementById('add-annotation-dialog').showModal();
+  };
+
+  // Delete an annotation from dialog
+  const handleDeleteAnnotation = (annotation) => {
+    const index = findAnnotationIndex(annotation);
+
+    if (index !== -1) {
+      deleteAnnotation(index);
+    }
+
+    // Reset editing state
+    setIsEditMode(false);
+    setCurrentAnnotation(null);
+  };
+
+  // Add or update an annotation from the form
+  const handleAnnotationSubmit = (e, formData, isEditing) => {
     e.preventDefault();
-    const form = e.target;
-    const start = parseInt(form.start.value);
-    const end = parseInt(form.end.value);
-    const text = form.text.value;
 
-    let type = form.type.value;
-    if (type === '__new__' && form.newTypeName.value.trim()) {
-      type = form.newTypeName.value.trim();
-      if (!knownEntityTypes.includes(type)) {
-        setKnownEntityTypes([...knownEntityTypes, type]);
+    if (isEditing) {
+      const index = findAnnotationIndex(currentAnnotation);
+
+      if (index !== -1) {
+        editAnnotation(index, {
+          ...formData,
+          id: currentDoc.id
+        });
       }
-    }
-
-    const normalizedId = form.normalizedId.value.trim() || null;
-
-    if (start >= 0 && end > start && text && type) {
+    } else {
       addAnnotation({
-        start,
-        end,
-        text,
-        type,
-        normalizedId
+        ...formData,
+        id: currentDoc.id
       });
-      form.reset();
-      document.getElementById('add-annotation-dialog').close();
     }
+
+    // Reset editing state
+    setIsEditMode(false);
+    setCurrentAnnotation(null);
   };
 
-  // Add a new entity type to the global list
-  const addNewEntityType = (newType) => {
-    if (newType && !knownEntityTypes.includes(newType)) {
-      setKnownEntityTypes([...knownEntityTypes, newType]);
-    }
-  };
-
-  // Create a new empty document
-  const createNewDocument = () => {
-    const newDoc = {
-      id: `doc_${Date.now()}`,
-      title: 'New Document',
-      abstract: '',
-      annotations: []
-    };
-
-    setDocuments([...documents, newDoc]);
-    setCurrentDocIndex(documents.length);
+  // Open dialog for adding a new annotation
+  const openAddAnnotationDialog = () => {
+    setIsEditMode(false);
+    setCurrentAnnotation(null);
+    document.getElementById('add-annotation-dialog').showModal();
   };
 
   return (
@@ -285,7 +268,7 @@ const PubTatorEditor = () => {
                 onMouseUp={handleTextSelection}
                 ref={fullTextRef}
               >
-                {renderHighlightedText(currentDoc, regexPattern)}
+                {renderHighlightedText(currentDoc, regexPattern, handleAnnotationClick)}
               </div>
             </div>
           </div>
@@ -295,7 +278,7 @@ const PubTatorEditor = () => {
             <div className="flex justify-between items-center mb-3">
               <h2 className="text-xl font-bold">Annotations</h2>
               <button
-                onClick={() => document.getElementById('add-annotation-dialog').showModal()}
+                onClick={openAddAnnotationDialog}
                 className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
               >
                 Add Annotation
@@ -343,10 +326,14 @@ const PubTatorEditor = () => {
         </div>
       )}
 
-      {/* Add annotation dialog - replaced with component */}
+      {/* Annotation dialog - now handles both adding, editing, and deletion */}
       <AnnotationDialog
-        onSubmit={handleAddAnnotationSubmit}
+        onSubmit={handleAnnotationSubmit}
         knownEntityTypes={knownEntityTypes}
+        editMode={isEditMode}
+        annotation={currentAnnotation}
+        onDelete={handleDeleteAnnotation}
+        documentText={getCombinedText(currentDoc)}
       />
 
       {/* Import text modal */}
