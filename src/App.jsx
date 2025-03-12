@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import AnnotationRow from './components/AnnotationRow';
 import AnnotationDialog from './components/AnnotationDialog';
 import DocumentNavigation from './components/DocumentNavigation';
@@ -29,6 +29,11 @@ const PubTatorEditor = () => {
   const [isEditMode, setIsEditMode] = useState(false);
   const [currentAnnotation, setCurrentAnnotation] = useState(null);
   const [selectedText, setSelectedText] = useState(null);
+
+  // Add useEffect to clear selectedText when document changes
+  useEffect(() => {
+    setSelectedText(null);
+  }, [currentDocIndex]);
 
   // Handle file upload
   const handleFileUpload = (event) => {
@@ -169,6 +174,15 @@ const PubTatorEditor = () => {
     // Reset editing state
     setIsEditMode(false);
     setCurrentAnnotation(null);
+    setSelectedText(null); // Clear selection after submission
+  };
+
+  // Handle dialog close
+  const handleDialogClose = () => {
+    setSelectedText(null); // Clear selection when dialog is closed without submitting
+    setIsEditMode(false);
+    setCurrentAnnotation(null);
+    document.getElementById('add-annotation-dialog').close();
   };
 
   // Open dialog for adding a new annotation
@@ -330,6 +344,7 @@ const PubTatorEditor = () => {
         onDelete={handleDeleteAnnotation}
         documentText={getCombinedText(currentDoc)}
         selectedText={selectedText}
+        onClose={handleDialogClose} // Add new prop for handling close
       />
 
     </div>

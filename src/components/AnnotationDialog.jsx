@@ -7,7 +7,8 @@ const AnnotationDialog = ({
   annotation = null,
   onDelete = null,
   documentText = '',
-  selectedText = null
+  selectedText = null,
+  onClose = null  // Add new prop for handling close
 }) => {
   const [formValues, setFormValues] = useState({
     start: '',
@@ -124,12 +125,21 @@ const AnnotationDialog = ({
     };
 
     onSubmit(e, annotationData, editMode);
-    document.getElementById('add-annotation-dialog').close();
+    handleClose();
   };
 
   const handleDelete = () => {
     if (onDelete && editMode && annotation) {
       onDelete(annotation);
+      handleClose();
+    }
+  };
+
+  // Add a function to handle dialog closing
+  const handleClose = () => {
+    if (onClose) {
+      onClose();
+    } else {
       document.getElementById('add-annotation-dialog').close();
     }
   };
@@ -139,7 +149,7 @@ const AnnotationDialog = ({
       <div className="bg-gray-100 px-4 py-3 flex justify-between items-center">
         <h3 className="font-semibold">{editMode ? 'Edit Annotation' : 'Add New Annotation'}</h3>
         <button
-          onClick={() => document.getElementById('add-annotation-dialog').close()}
+          onClick={handleClose}
           className="text-gray-500 hover:text-gray-700"
         >
           ✕
@@ -238,7 +248,7 @@ const AnnotationDialog = ({
           )}
           <button
             type="button"
-            onClick={() => document.getElementById('add-annotation-dialog').close()}
+            onClick={handleClose}
             className="px-4 py-2 border rounded"
           >
             Cancel
