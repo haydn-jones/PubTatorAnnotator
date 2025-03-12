@@ -214,9 +214,10 @@ export const processTextSegments = (combinedText, annotations, regexPattern = ''
  * @param {Object} document - Document object with text and annotations
  * @param {string} regexPattern - Optional regex pattern to highlight
  * @param {Function} onAnnotationClick - Click handler for annotations
+ * @param {Function} onAnnotationDelete - Right-click handler for annotations
  * @returns {JSX.Element} Rendered JSX element with highlighted text
  */
-export const renderHighlightedText = (document, regexPattern = '', onAnnotationClick = null) => {
+export const renderHighlightedText = (document, regexPattern = '', onAnnotationClick = null, onAnnotationDelete = null) => {
     const combinedText = getCombinedText(document);
     if (!combinedText) return <p>No content available</p>;
 
@@ -238,6 +239,12 @@ export const renderHighlightedText = (document, regexPattern = '', onAnnotationC
                             className={`border rounded px-[2px] ${colorClasses.highlight} ${onAnnotationClick ? 'cursor-pointer hover:brightness-90' : ''}`}
                             title={`${segment.type}${annotation?.normalizedId ? ` (${annotation.normalizedId})` : ''}`}
                             onClick={() => onAnnotationClick && annotation && onAnnotationClick(annotation)}
+                            onContextMenu={(e) => {
+                                if (onAnnotationDelete && annotation) {
+                                    e.preventDefault(); // Prevent default browser context menu
+                                    onAnnotationDelete(annotation);
+                                }
+                            }}
                             data-annotation-index={annotation ? document.annotations.indexOf(annotation) : null}
                         >
                             {segment.text}

@@ -127,6 +127,14 @@ const PubTatorEditor = () => {
     document.getElementById('add-annotation-dialog').showModal();
   };
 
+  // Handle annotation deletion through right-click
+  const handleRightClickDelete = (annotation) => {
+    const index = findAnnotationIndex(annotation);
+    if (index !== -1) {
+      deleteAnnotation(index);
+    }
+  };
+
   // Delete an annotation from dialog
   const handleDeleteAnnotation = (annotation) => {
     const index = findAnnotationIndex(annotation);
@@ -257,7 +265,12 @@ const PubTatorEditor = () => {
                 onMouseUp={handleTextSelection}
                 ref={fullTextRef}
               >
-                {renderHighlightedText(currentDoc, regexPattern, handleAnnotationClick)}
+                {renderHighlightedText(
+                  currentDoc,
+                  regexPattern,
+                  handleAnnotationClick,
+                  handleRightClickDelete
+                )}
               </div>
             </div>
           </div>
