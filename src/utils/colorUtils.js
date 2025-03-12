@@ -38,3 +38,11 @@ export const getEntityColor = (type) => {
   
   return colorOptions[Math.abs(hash) % colorOptions.length];
 };
+
+// Utility function to get color for potential annotation matches
+export const getPotentialMatchStyle = () => {
+  return { 
+    text: 'text-red-600',
+    style: 'bg-red-50' // Removed border styles, keeping just light background
+  };
+};

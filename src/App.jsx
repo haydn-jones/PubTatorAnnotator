@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import AnnotationRow from './components/AnnotationRow';
 import AnnotationDialog from './components/AnnotationDialog';
-import { getEntityColor } from './utils/colorUtils';
+import { getEntityColor, getPotentialMatchStyle } from './utils/colorUtils';
 import { parsePubtator, generateExportContent } from './utils/pubtatorUtils';
 
 const PubTatorEditor = () => {
@@ -33,6 +33,15 @@ const PubTatorEditor = () => {
     let lastEnd = 0;
     const segments = [];
 
+    // Collect all unique annotated texts with their types
+    const uniqueAnnotatedTexts = new Map();
+    for (const anno of annotations) {
+      // Only consider annotations with text of reasonable length (not too short or too long)
+      if (anno.text.length >= 1 && anno.text.length <= 50) {
+        uniqueAnnotatedTexts.set(anno.text.toLowerCase(), anno.type);
+      }
+    }
+
     for (const anno of annotations) {
       // Text before annotation
       if (anno.start > lastEnd) {
@@ -60,20 +69,91 @@ const PubTatorEditor = () => {
       });
     }
 
+    // Process segments to find potential matches
+    const finalSegments = [];
+    for (const segment of segments) {
+      if (!segment.highlighted && segment.text.length > 0) {
+        // Process this non-highlighted segment to find potential matches
+        let currentPosition = 0;
+        let lastMatchEnd = 0;
+        const textToAnalyze = segment.text;
+
+        while (currentPosition < textToAnalyze.length) {
+          // Find the longest match at the current position
+          let bestMatch = null;
+          let bestMatchType = null;
+          let bestMatchLength = 0;
+
+          for (const [annoText, type] of uniqueAnnotatedTexts.entries()) {
+            if (textToAnalyze.substring(currentPosition).toLowerCase().startsWith(annoText) &&
+              annoText.length > bestMatchLength) {
+              bestMatch = annoText;
+              bestMatchType = type;
+              bestMatchLength = annoText.length;
+            }
+          }
+
+          if (bestMatch) {
+            // Add text before match if any
+            if (currentPosition > lastMatchEnd) {
+              finalSegments.push({
+                text: textToAnalyze.substring(lastMatchEnd, currentPosition),
+                highlighted: false
+              });
+            }
+
+            // Add the match
+            finalSegments.push({
+              text: textToAnalyze.substring(currentPosition, currentPosition + bestMatchLength),
+              highlighted: 'potential',
+              type: bestMatchType
+            });
+
+            lastMatchEnd = currentPosition + bestMatchLength;
+            currentPosition = lastMatchEnd;
+          } else {
+            // Move to next character
+            currentPosition++;
+          }
+        }
+
+        // Add any remaining text
+        if (lastMatchEnd < textToAnalyze.length) {
+          finalSegments.push({
+            text: textToAnalyze.substring(lastMatchEnd),
+            highlighted: false
+          });
+        }
+      } else {
+        // Keep highlighted segments as they are
+        finalSegments.push(segment);
+      }
+    }
+
     return (
       <p className="whitespace-pre-wrap">
-        {segments.map((segment, i) => {
-          if (segment.highlighted) {
+        {finalSegments.map((segment, i) => {
+          if (segment.highlighted === true) {
             const colorClasses = getEntityColor(segment.type);
-            console.log(colorClasses);
             return (
               <mark
                 key={i}
-                className={`border rounded px-1 ${colorClasses.highlight}`}
+                className={`border rounded px-[2px] ${colorClasses.highlight}`}
                 title={segment.type}
               >
                 {segment.text}
               </mark>
+            );
+          } else if (segment.highlighted === 'potential') {
+            const potentialStyle = getPotentialMatchStyle();
+            return (
+              <span
+                key={i}
+                className={`${potentialStyle.text} ${potentialStyle.style}`}
+                title={`Potential ${segment.type}`}
+              >
+                {segment.text}
+              </span>
             );
           }
           return <span key={i}>{segment.text}</span>;
