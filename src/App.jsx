@@ -20,7 +20,6 @@ const PubTatorEditor = () => {
     deleteAnnotation,
     findAnnotationIndex,
     addNewEntityType,
-    createNewDocument,
     setAllDocuments
   } = useAnnotationManager([], ['Chemical', 'Gene', 'Disease', 'Species', 'Mutation', 'CellLine']);
 
@@ -194,17 +193,11 @@ const PubTatorEditor = () => {
             Load File
           </label>
           <button
-            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-            onClick={createNewDocument}
-          >
-            New Document
-          </button>
-          <button
             className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
             onClick={saveToFile}
             disabled={documents.length === 0}
           >
-            Export
+            Save
           </button>
         </div>
       </header>

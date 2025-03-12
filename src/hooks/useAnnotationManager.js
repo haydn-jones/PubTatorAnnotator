@@ -66,19 +66,6 @@ export const useAnnotationManager = (initialDocuments = [], initialEntityTypes =
     }
   };
 
-  // Create a new empty document
-  const createNewDocument = () => {
-    const newDoc = {
-      id: `doc_${Date.now()}`,
-      title: 'New Document',
-      abstract: '',
-      annotations: []
-    };
-
-    setDocuments([...documents, newDoc]);
-    setCurrentDocIndex(documents.length);
-  };
-
   return {
     documents,
     setDocuments,
@@ -92,7 +79,6 @@ export const useAnnotationManager = (initialDocuments = [], initialEntityTypes =
     deleteAnnotation,
     findAnnotationIndex,
     addNewEntityType,
-    createNewDocument,
     setAllDocuments
   };
 };
