@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from 'react';
 
-const AnnotationDialog = ({ onSubmit, knownEntityTypes, editMode = false, annotation = null, onDelete = null, documentText = '' }) => {
+const AnnotationDialog = ({
+  onSubmit,
+  knownEntityTypes,
+  editMode = false,
+  annotation = null,
+  onDelete = null,
+  documentText = '',
+  selectedText = null
+}) => {
   const [formValues, setFormValues] = useState({
     start: '',
     end: '',
@@ -10,7 +18,7 @@ const AnnotationDialog = ({ onSubmit, knownEntityTypes, editMode = false, annota
     normalizedId: ''
   });
 
-  // Initialize form values when in edit mode or when annotation changes
+  // Initialize form values when in edit mode, annotation changes, or selectedText changes
   useEffect(() => {
     if (editMode && annotation) {
       setFormValues({
@@ -21,18 +29,28 @@ const AnnotationDialog = ({ onSubmit, knownEntityTypes, editMode = false, annota
         newTypeName: '',
         normalizedId: annotation.normalizedId || ''
       });
-    } else if (!editMode) {
-      // Reset form for add mode
+    } else if (!editMode && selectedText) {
+      // Use the selected text info directly from props
       setFormValues({
-        start: document.getElementById('new-start')?.value || '',
-        end: document.getElementById('new-end')?.value || '',
-        text: document.getElementById('new-text')?.value || '',
+        start: selectedText.start,
+        end: selectedText.end,
+        text: selectedText.text,
+        type: '',
+        newTypeName: '',
+        normalizedId: ''
+      });
+    } else if (!editMode) {
+      // Reset form for add mode without selection
+      setFormValues({
+        start: '',
+        end: '',
+        text: '',
         type: '',
         newTypeName: '',
         normalizedId: ''
       });
     }
-  }, [editMode, annotation]);
+  }, [editMode, annotation, selectedText]);
 
   // Add JavaScript to show/hide the new type field
   useEffect(() => {

@@ -29,6 +29,7 @@ const PubTatorEditor = () => {
   const fullTextRef = useRef(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [currentAnnotation, setCurrentAnnotation] = useState(null);
+  const [selectedText, setSelectedText] = useState(null);
 
   // Handle file upload
   const handleFileUpload = (event) => {
@@ -100,18 +101,11 @@ const PubTatorEditor = () => {
       const selectionInfo = getTextSelectionInfo(selection, fullTextRef.current);
 
       if (selectionInfo) {
+        // Store the selection info in state
+        setSelectedText(selectionInfo);
+
         // Find the dialog element and open it
         const dialog = document.getElementById('add-annotation-dialog');
-
-        // Set form values
-        document.getElementById('new-start').value = selectionInfo.start;
-        document.getElementById('new-end').value = selectionInfo.end;
-        document.getElementById('new-text').value = selectionInfo.text;
-
-        // Focus the type field
-        setTimeout(() => {
-          document.getElementById('new-type').focus();
-        }, 100);
 
         if (dialog) {
           dialog.showModal();
@@ -177,6 +171,7 @@ const PubTatorEditor = () => {
   const openAddAnnotationDialog = () => {
     setIsEditMode(false);
     setCurrentAnnotation(null);
+    setSelectedText(null); // Clear any previous selection
     document.getElementById('add-annotation-dialog').showModal();
   };
 
@@ -336,6 +331,7 @@ const PubTatorEditor = () => {
         annotation={currentAnnotation}
         onDelete={handleDeleteAnnotation}
         documentText={getCombinedText(currentDoc)}
+        selectedText={selectedText}
       />
 
     </div>
