@@ -145,6 +145,11 @@ const PubTatorEditor = () => {
   const handleAnnotationSubmit = (e, formData, isEditing) => {
     e.preventDefault();
 
+    // Check if this is a new entity type and add it to known types
+    if (formData.type && !knownEntityTypes.includes(formData.type)) {
+      addNewEntityType(formData.type);
+    }
+
     if (isEditing) {
       const index = findAnnotationIndex(currentAnnotation);
 
