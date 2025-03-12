@@ -44,7 +44,12 @@ const createAnnotationPositions = (annotations) => {
 const createPotentialMatches = (text, uniqueTexts, existingPositions) => {
     const potentialPositions = [];
 
-    for (const [annoText, entityType] of uniqueTexts.entries()) {
+    // Convert Map entries to array and sort by text length (descending)
+    // This ensures that longer matches are processed first
+    const sortedEntries = [...uniqueTexts.entries()]
+        .sort((a, b) => b[0].length - a[0].length);
+
+    for (const [annoText, entityType] of sortedEntries) {
         const pattern = new RegExp(escapeRegExp(annoText), 'gi');
         let match;
 
@@ -52,13 +57,12 @@ const createPotentialMatches = (text, uniqueTexts, existingPositions) => {
             const matchStart = match.index;
             const matchEnd = matchStart + match[0].length;
 
-            // Skip if this match overlaps with an existing annotation
-            const overlapsAnnotation = existingPositions.some(pos =>
-                pos.type === 'annotation' &&
+            // Skip if this match overlaps with an existing annotation or another potential match
+            const overlapsExisting = [...existingPositions, ...potentialPositions].some(pos =>
                 rangesOverlap(matchStart, matchEnd, pos.start, pos.end)
             );
 
-            if (!overlapsAnnotation) {
+            if (!overlapsExisting) {
                 potentialPositions.push({
                     start: matchStart,
                     end: matchEnd,
