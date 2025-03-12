@@ -1,25 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-const AnnotationRow = ({ annotation, index, onEdit, onDelete, knownEntityTypes, getEntityColor }) => {
+const AnnotationRow = ({ annotation, index, onEdit, onDelete, knownEntityTypes, getEntityColor, documentText, onAddNewEntityType }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedAnnotation, setEditedAnnotation] = useState({ ...annotation });
   const [isCreatingNewType, setIsCreatingNewType] = useState(false);
-  
+
+  // Add useEffect to update editedAnnotation when annotation prop changes
+  useEffect(() => {
+    setEditedAnnotation({ ...annotation });
+  }, [annotation]);
+
   const colorClasses = getEntityColor(annotation.type);
-  
+
   const handleSave = () => {
     let updatedAnnotation = { ...editedAnnotation };
-    
+
     // If creating new type, use the custom type name
     if (isCreatingNewType && editedAnnotation.customType) {
       updatedAnnotation.type = editedAnnotation.customType;
+
+      // Add the new type to the global list
+      onAddNewEntityType(updatedAnnotation.type);
     }
-    
+
     onEdit(index, updatedAnnotation);
     setIsEditing(false);
     setIsCreatingNewType(false);
   };
-  
+
   const handleTypeChange = (e) => {
     if (e.target.value === '__new__') {
       setIsCreatingNewType(true);
@@ -36,14 +44,34 @@ const AnnotationRow = ({ annotation, index, onEdit, onDelete, knownEntityTypes, 
       });
     }
   };
-  
+
+  // New handler to update text when offsets change
+  const handleOffsetChange = (field, value) => {
+    const numValue = parseInt(value);
+    const updatedAnnotation = { ...editedAnnotation, [field]: numValue };
+
+    // Update the text if both start and end are valid
+    if (documentText &&
+      !isNaN(updatedAnnotation.start) &&
+      !isNaN(updatedAnnotation.end) &&
+      updatedAnnotation.start >= 0 &&
+      updatedAnnotation.end <= documentText.length &&
+      updatedAnnotation.start < updatedAnnotation.end) {
+
+      // Extract the new text based on the updated offsets
+      updatedAnnotation.text = documentText.substring(updatedAnnotation.start, updatedAnnotation.end);
+    }
+
+    setEditedAnnotation(updatedAnnotation);
+  };
+
   return isEditing ? (
     <tr className="border-b">
       <td className="border p-2">
         <input
           type="number"
           value={editedAnnotation.start}
-          onChange={(e) => setEditedAnnotation({ ...editedAnnotation, start: parseInt(e.target.value) })}
+          onChange={(e) => handleOffsetChange('start', e.target.value)}
           className="border p-1 w-full"
         />
       </td>
@@ -51,7 +79,7 @@ const AnnotationRow = ({ annotation, index, onEdit, onDelete, knownEntityTypes, 
         <input
           type="number"
           value={editedAnnotation.end}
-          onChange={(e) => setEditedAnnotation({ ...editedAnnotation, end: parseInt(e.target.value) })}
+          onChange={(e) => handleOffsetChange('end', e.target.value)}
           className="border p-1 w-full"
         />
       </td>
@@ -75,7 +103,7 @@ const AnnotationRow = ({ annotation, index, onEdit, onDelete, knownEntityTypes, 
             ))}
             <option value="__new__">Create new type...</option>
           </select>
-          
+
           {isCreatingNewType && (
             <input
               type="text"

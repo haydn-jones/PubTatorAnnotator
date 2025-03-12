@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import AnnotationRow from './components/AnnotationRow';
 import AnnotationDialog from './components/AnnotationDialog';
 import { getEntityColor } from './utils/colorUtils';
+import { parsePubtator, generateExportContent } from './utils/pubtatorUtils';
 
 const PubTatorEditor = () => {
   const [documents, setDocuments] = useState([]);
@@ -11,12 +12,13 @@ const PubTatorEditor = () => {
   const [knownEntityTypes, setKnownEntityTypes] = useState(['Chemical', 'Gene', 'Disease', 'Species', 'Mutation', 'CellLine']);
   const [docIdSearch, setDocIdSearch] = useState('');
   const [showDocIdDropdown, setShowDocIdDropdown] = useState(false);
+  const [originalFilename, setOriginalFilename] = useState('pubtator_annotations.txt');
   const docSearchRef = useRef(null);
   const fullTextRef = useRef(null);
 
   // Get current document or empty placeholder
   const currentDoc = documents[currentDocIndex] || { id: '', title: '', abstract: '', annotations: [] };
-  
+
   // Get combined text (title + abstract)
   const getCombinedText = () => {
     return currentDoc.title + (currentDoc.abstract ? " " + currentDoc.abstract : "");
@@ -26,11 +28,11 @@ const PubTatorEditor = () => {
   const renderHighlightedText = () => {
     const combinedText = getCombinedText();
     if (!combinedText) return <p>No content available</p>;
-    
+
     const annotations = [...currentDoc.annotations].sort((a, b) => a.start - b.start);
     let lastEnd = 0;
     const segments = [];
-    
+
     for (const anno of annotations) {
       // Text before annotation
       if (anno.start > lastEnd) {
@@ -39,17 +41,17 @@ const PubTatorEditor = () => {
           highlighted: false
         });
       }
-      
+
       // Highlighted annotation
       segments.push({
         text: combinedText.substring(anno.start, anno.end),
         highlighted: true,
         type: anno.type
       });
-      
+
       lastEnd = anno.end;
     }
-    
+
     // Remaining text
     if (lastEnd < combinedText.length) {
       segments.push({
@@ -57,7 +59,7 @@ const PubTatorEditor = () => {
         highlighted: false
       });
     }
-    
+
     return (
       <p className="whitespace-pre-wrap">
         {segments.map((segment, i) => {
@@ -65,8 +67,8 @@ const PubTatorEditor = () => {
             const colorClasses = getEntityColor(segment.type);
             console.log(colorClasses);
             return (
-              <mark 
-                key={i} 
+              <mark
+                key={i}
                 className={`border rounded px-1 ${colorClasses.highlight}`}
                 title={segment.type}
               >
@@ -80,67 +82,20 @@ const PubTatorEditor = () => {
     );
   };
 
-  // Parse PubTator content
-  const parsePubtator = (content) => {
-    const lines = content.split('\n').filter(line => line.trim() !== '');
-    const docs = [];
-    let currentDoc = null;
-    const entityTypes = new Set();
-
-    for (const line of lines) {
-      if (line.includes('|t|')) {
-        // Title line
-        if (currentDoc) {
-          docs.push(currentDoc);
-        }
-        const [id, _, title] = line.split('|');
-        currentDoc = { id, title, abstract: '', annotations: [] };
-      } else if (line.includes('|a|')) {
-        // Abstract line
-        const [_, __, abstract] = line.split('|');
-        currentDoc.abstract = abstract;
-      } else if (line.trim() !== '') {
-        // Annotation line
-        const parts = line.split('\t');
-        if (parts.length >= 5) {
-          const [id, start, end, text, type] = parts;
-          const normalizedId = parts.length >= 6 ? parts[5] : null;
-          
-          // Track entity type
-          entityTypes.add(type);
-          
-          currentDoc.annotations.push({
-            id,
-            start: parseInt(start),
-            end: parseInt(end),
-            text,
-            type,
-            normalizedId
-          });
-        }
-      }
-    }
-
-    if (currentDoc) {
-      docs.push(currentDoc);
-    }
-    
-    // Update global entity types
-    setKnownEntityTypes([...entityTypes]);
-
-    return docs;
-  };
-
   // Handle file upload
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (file) {
+      // Store the original filename
+      setOriginalFilename(file.name);
+
       const reader = new FileReader();
       reader.onload = (e) => {
         const content = e.target.result;
-        const parsedDocs = parsePubtator(content);
-        setDocuments(parsedDocs);
+        const { docs, entityTypes } = parsePubtator(content);
+        setDocuments(docs);
         setCurrentDocIndex(0);
+        setKnownEntityTypes([...entityTypes]);
       };
       reader.readAsText(file);
     }
@@ -149,9 +104,10 @@ const PubTatorEditor = () => {
   // Handle pasting content
   const handleImportSubmit = () => {
     if (importText.trim()) {
-      const parsedDocs = parsePubtator(importText);
-      setDocuments(parsedDocs);
+      const { docs, entityTypes } = parsePubtator(importText);
+      setDocuments(docs);
       setCurrentDocIndex(0);
+      setKnownEntityTypes([...entityTypes]);
       setShowImportModal(false);
       setImportText('');
     }
@@ -164,7 +120,7 @@ const PubTatorEditor = () => {
       ...annotation,
       id: currentDoc.id
     });
-    
+
     // Sort annotations by start position
     updatedDocs[currentDocIndex].annotations.sort((a, b) => a.start - b.start);
     setDocuments(updatedDocs);
@@ -187,44 +143,45 @@ const PubTatorEditor = () => {
     setDocuments(updatedDocs);
   };
 
-  // Generate export content
-  const generateExportContent = () => {
-    let content = '';
-    
-    for (const doc of documents) {
-      // Title line
-      content += `${doc.id}|t|${doc.title}\n`;
-      
-      // Abstract line
-      content += `${doc.id}|a|${doc.abstract}\n`;
-      
-      // Annotation lines
-      for (const anno of doc.annotations) {
-        let annoLine = `${anno.id}\t${anno.start}\t${anno.end}\t${anno.text}\t${anno.type}`;
-        
-        // Add normalized ID if it exists
-        if (anno.normalizedId) {
-          annoLine += `\t${anno.normalizedId}`;
-        }
-        
-        content += annoLine + '\n';
+  // Save to file
+  const saveToFile = async () => {
+    const content = generateExportContent(documents);
+
+    // Try to use the File System Access API first
+    if ('showSaveFilePicker' in window) {
+      try {
+        const fileHandle = await window.showSaveFilePicker({
+          suggestedName: originalFilename,
+          types: [
+            {
+              description: 'Text Files',
+              accept: { 'text/plain': ['.txt', '.pubtator'] },
+            },
+          ],
+        });
+
+        const writable = await fileHandle.createWritable();
+        await writable.write(content);
+        await writable.close();
+      } catch (err) {
+        // User cancelled the save dialog or other error
+        console.error('Error saving file:', err);
+        // Fall back to the download method
+        downloadFile(content);
       }
-      
-      // Empty line between documents
-      content += '\n';
+    } else {
+      // Fallback for browsers that don't support the File System Access API
+      downloadFile(content);
     }
-    
-    return content;
   };
 
-  // Save to file
-  const saveToFile = () => {
-    const content = generateExportContent();
+  // Fallback download method
+  const downloadFile = (content) => {
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'pubtator_annotations.txt';
+    a.download = originalFilename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -236,35 +193,35 @@ const PubTatorEditor = () => {
     if (window.getSelection && fullTextRef.current) {
       const selection = window.getSelection();
       const text = selection.toString().trim();
-      
+
       if (text) {
         const fullText = fullTextRef.current.textContent;
-        
+
         // Find all occurrences of the selected text
         let selectionStart = -1;
         const selectionRange = selection.getRangeAt(0);
         const preSelectionRange = document.createRange();
-        
+
         preSelectionRange.setStartBefore(fullTextRef.current);
         preSelectionRange.setEnd(selectionRange.startContainer, selectionRange.startOffset);
-        
+
         // Determine exact start position considering the combined text
         selectionStart = preSelectionRange.toString().length;
-        
+
         if (selectionStart >= 0) {
           // Find the dialog element and open it
           const dialog = document.getElementById('add-annotation-dialog');
-          
+
           // Set form values
           document.getElementById('new-start').value = selectionStart;
           document.getElementById('new-end').value = selectionStart + text.length;
           document.getElementById('new-text').value = text;
-          
+
           // Focus the type field
           setTimeout(() => {
             document.getElementById('new-type').focus();
           }, 100);
-          
+
           if (dialog) {
             dialog.showModal();
           }
@@ -280,7 +237,7 @@ const PubTatorEditor = () => {
     const start = parseInt(form.start.value);
     const end = parseInt(form.end.value);
     const text = form.text.value;
-    
+
     let type = form.type.value;
     if (type === '__new__' && form.newTypeName.value.trim()) {
       type = form.newTypeName.value.trim();
@@ -288,9 +245,9 @@ const PubTatorEditor = () => {
         setKnownEntityTypes([...knownEntityTypes, type]);
       }
     }
-    
+
     const normalizedId = form.normalizedId.value.trim() || null;
-    
+
     if (start >= 0 && end > start && text && type) {
       addAnnotation({
         start,
@@ -304,6 +261,13 @@ const PubTatorEditor = () => {
     }
   };
 
+  // Add a new entity type to the global list
+  const addNewEntityType = (newType) => {
+    if (newType && !knownEntityTypes.includes(newType)) {
+      setKnownEntityTypes([...knownEntityTypes, newType]);
+    }
+  };
+
   // Create a new empty document
   const createNewDocument = () => {
     const newDoc = {
@@ -312,45 +276,18 @@ const PubTatorEditor = () => {
       abstract: '',
       annotations: []
     };
-    
+
     setDocuments([...documents, newDoc]);
     setCurrentDocIndex(documents.length);
-  };
-
-  // Update document title or abstract
-  const updateDocument = (field, value) => {
-    const updatedDocs = [...documents];
-    const oldTitle = updatedDocs[currentDocIndex].title;
-    const oldAbstract = updatedDocs[currentDocIndex].abstract;
-    
-    // Update the document field
-    updatedDocs[currentDocIndex][field] = value;
-    
-    // If title or abstract changed, we need to adjust annotation positions
-    if (field === 'title' || field === 'abstract') {
-      const oldCombinedText = oldTitle + (oldAbstract ? " " + oldAbstract : "");
-      const newCombinedText = updatedDocs[currentDocIndex].title + 
-        (updatedDocs[currentDocIndex].abstract ? " " + updatedDocs[currentDocIndex].abstract : "");
-      
-      // If this is the first content being added, no need to adjust
-      if (oldCombinedText.trim() !== "") {
-        // For now, we'll warn the user that positions might be off
-        if (updatedDocs[currentDocIndex].annotations.length > 0) {
-          alert("Warning: Editing the title or abstract text may cause annotation positions to become incorrect.");
-        }
-      }
-    }
-    
-    setDocuments(updatedDocs);
   };
 
   // Navigate to a specific document by ID
   const navigateToDocumentById = (id = null) => {
     const searchId = id || docIdSearch.trim();
     if (!searchId) return;
-    
+
     const docIndex = documents.findIndex(doc => doc.id === searchId);
-    
+
     if (docIndex !== -1) {
       setCurrentDocIndex(docIndex);
       setDocIdSearch('');
@@ -402,25 +339,25 @@ const PubTatorEditor = () => {
             className="hidden"
             id="file-upload"
           />
-          <label 
-            htmlFor="file-upload" 
+          <label
+            htmlFor="file-upload"
             className="bg-blue-600 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-700"
           >
             Load File
           </label>
-          <button 
+          <button
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
             onClick={() => setShowImportModal(true)}
           >
             Paste Content
           </button>
-          <button 
+          <button
             className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
             onClick={createNewDocument}
           >
             New Document
           </button>
-          <button 
+          <button
             className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
             onClick={saveToFile}
             disabled={documents.length === 0}
@@ -433,7 +370,7 @@ const PubTatorEditor = () => {
       {/* Document navigation */}
       {documents.length > 0 && (
         <div className="mb-4 flex items-center gap-2 flex-wrap">
-          <button 
+          <button
             onClick={() => setCurrentDocIndex(Math.max(0, currentDocIndex - 1))}
             disabled={currentDocIndex === 0}
             className="bg-gray-200 px-3 py-1 rounded disabled:opacity-50"
@@ -441,14 +378,14 @@ const PubTatorEditor = () => {
             ← Previous
           </button>
           <span>Document {currentDocIndex + 1} of {documents.length}</span>
-          <button 
+          <button
             onClick={() => setCurrentDocIndex(Math.min(documents.length - 1, currentDocIndex + 1))}
             disabled={currentDocIndex === documents.length - 1}
             className="bg-gray-200 px-3 py-1 rounded disabled:opacity-50"
           >
             Next →
           </button>
-          
+
           <div className="flex ml-auto gap-1 relative" ref={docSearchRef}>
             <div className="relative">
               <input
@@ -492,17 +429,8 @@ const PubTatorEditor = () => {
         <div className="space-y-6">
           {/* Document info */}
           <div className="bg-white rounded-lg shadow p-4">
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1">Document ID:</label>
-              <input 
-                type="text" 
-                value={currentDoc.id} 
-                onChange={(e) => updateDocument('id', e.target.value)}
-                className="w-full p-2 border rounded"
-              />
-            </div>
             <div>
-              <div 
+              <div
                 className="w-full p-3 border rounded bg-gray-50 min-h-[100px]"
                 onMouseUp={handleTextSelection}
                 ref={fullTextRef}
@@ -516,14 +444,14 @@ const PubTatorEditor = () => {
           <div className="bg-white rounded-lg shadow p-4">
             <div className="flex justify-between items-center mb-3">
               <h2 className="text-xl font-bold">Annotations</h2>
-              <button 
+              <button
                 onClick={() => document.getElementById('add-annotation-dialog').showModal()}
                 className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
               >
                 Add Annotation
               </button>
             </div>
-            
+
             {currentDoc.annotations.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
@@ -539,7 +467,7 @@ const PubTatorEditor = () => {
                   </thead>
                   <tbody>
                     {currentDoc.annotations.map((anno, index) => (
-                      <AnnotationRow 
+                      <AnnotationRow
                         key={index}
                         annotation={anno}
                         index={index}
@@ -547,6 +475,8 @@ const PubTatorEditor = () => {
                         onDelete={deleteAnnotation}
                         knownEntityTypes={knownEntityTypes}
                         getEntityColor={getEntityColor}
+                        documentText={getCombinedText()} // Pass document text to the component
+                        onAddNewEntityType={addNewEntityType} // Pass the new function as a prop
                       />
                     ))}
                   </tbody>
@@ -565,7 +495,7 @@ const PubTatorEditor = () => {
       )}
 
       {/* Add annotation dialog - replaced with component */}
-      <AnnotationDialog 
+      <AnnotationDialog
         onSubmit={handleAddAnnotationSubmit}
         knownEntityTypes={knownEntityTypes}
       />
@@ -576,7 +506,7 @@ const PubTatorEditor = () => {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl">
             <div className="bg-gray-100 px-4 py-3 flex justify-between items-center">
               <h3 className="font-semibold">Paste PubTator Content</h3>
-              <button 
+              <button
                 onClick={() => setShowImportModal(false)}
                 className="text-gray-500 hover:text-gray-700"
               >
@@ -584,20 +514,20 @@ const PubTatorEditor = () => {
               </button>
             </div>
             <div className="p-4">
-              <textarea 
+              <textarea
                 value={importText}
                 onChange={(e) => setImportText(e.target.value)}
                 className="w-full p-2 border rounded h-64"
                 placeholder="Paste PubTator content here..."
               />
               <div className="flex justify-end gap-2 mt-4">
-                <button 
+                <button
                   onClick={() => setShowImportModal(false)}
                   className="px-4 py-2 border rounded"
                 >
                   Cancel
                 </button>
-                <button 
+                <button
                   onClick={handleImportSubmit}
                   className="px-4 py-2 bg-blue-600 text-white rounded"
                   disabled={!importText.trim()}
